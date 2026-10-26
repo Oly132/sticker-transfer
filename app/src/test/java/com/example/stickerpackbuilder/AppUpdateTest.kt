@@ -64,16 +64,19 @@ class AppUpdateTest {
         val provider = context.packageManager.resolveContentProvider(context.packageName + ".updates", 0)!!
         assertFalse(provider.exported); assertTrue(provider.grantUriPermissions)
     }
-    @Test fun updateUriCannotExposeOtherCacheFilesOrPrivateAccountFiles() {
+    @Test fun providerConfigurationExposesOnlyTheUpdateCacheSubdirectory() {
         val context = RuntimeEnvironment.getApplication()
-        val update = java.io.File(context.cacheDir, "updates/update.apk").apply { parentFile!!.mkdirs(); writeText("fixture") }
-        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".updates", update)
-        assertEquals("content", uri.scheme)
-        assertThrows(IllegalArgumentException::class.java) {
-            androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".updates", java.io.File(context.filesDir, "account.json"))
-        }
-        assertThrows(IllegalArgumentException::class.java) {
-            androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".updates", java.io.File(context.cacheDir, "other.txt"))
+        val provider = context.packageManager.resolveContentProvider(context.packageName + ".updates", android.content.pm.PackageManager.GET_META_DATA)!!
+        assertEquals("com.example.stickerpackbuilder.update.UpdateFiles", provider.name)
+        // AndroidX URI resolution assumes Android's '/' filesystem. Inspect our actual
+        // merged XML on Windows rather than testing that library against Windows '\\'.
+        provider.loadXmlMetaData(context.packageManager, "android.support.FILE_PROVIDER_PATHS").use { xml ->
+            val paths = mutableListOf<Triple<String, String?, String?>>()
+            while (xml.next() != org.xmlpull.v1.XmlPullParser.END_DOCUMENT) {
+                if (xml.eventType == org.xmlpull.v1.XmlPullParser.START_TAG && xml.name != "paths")
+                    paths += Triple(xml.name, xml.getAttributeValue(null, "name"), xml.getAttributeValue(null, "path"))
+            }
+            assertEquals(listOf(Triple("cache-path", "updates", "updates/")), paths)
         }
     }
 }

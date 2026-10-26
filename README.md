@@ -52,6 +52,8 @@ JDK 17/21, Android SDK 34, Android Gradle Plugin 8.5, Kotlin 1.9.24, Gradle 8.7.
 
 ```powershell
 ./gradlew.bat testDebugUnitTest lintDebug assemblePrototype
+# Optional JavaScript readiness/transfer-helper regression checks (Node.js):
+node --test scripts/tests
 ```
 
 - `prototype`: signed, non-debuggable APK; retains the existing Samsung app ID. Official release publishing requires the original local signing key.
