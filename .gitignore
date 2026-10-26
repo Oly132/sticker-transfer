@@ -1,0 +1,16 @@
+.gradle/
+.idea/
+**/build/
+local.properties
+*.iml
+*.jks
+*.keystore
+*.p12
+*.pem
+.env*
+outputs/
+release-output/
+**/rpc-config.json
+**/creds.json
+**/shared_prefs/
+**/transfer-diagnostics/

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Sticker Sync</string>
+    <string name="automation_description">Transfers Saved stickers from your own TikTok self-chat while keeping the transfer screen visible. Reads only TikTok controls.</string>
+</resources>

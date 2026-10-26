@@ -1,0 +1,4 @@
+<resources>
+    <item name="filter_still" type="id" />
+    <item name="filter_animated" type="id" />
+</resources>
