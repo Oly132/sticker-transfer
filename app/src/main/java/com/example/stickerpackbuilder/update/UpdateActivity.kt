@@ -76,7 +76,14 @@ class UpdateActivity : Screen() {
     }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        toolbar("App updates")
+        toolbar("App updates").setNavigationOnClickListener {
+            if (model.state.value?.info?.mandatory == true) finishAffinity() else finish()
+        }
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (model.state.value?.info?.mandatory == true) finishAffinity() else finish()
+            }
+        })
         val body = body()
         body.addView(title("Keep your favourites flowing."))
         body.addView(text("Updates come from Sticker Transfer's GitHub releases. Your account connections and collection are kept when you install over this app.", 14f, true))
@@ -98,7 +105,7 @@ class UpdateActivity : Screen() {
         }
         body.addView(action)
         model.state.observe(this) { state ->
-            copy.text = state.text
+            copy.text = if (state.info?.mandatory == true) "Update required to continue transferring.\n\n${state.text}" else state.text
             progress.visibility = if (state.busy) android.view.View.VISIBLE else android.view.View.GONE
             progress.isIndeterminate = state.percent < 0
             if (state.percent >= 0) progress.progress = state.percent

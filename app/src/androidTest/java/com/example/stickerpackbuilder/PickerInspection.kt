@@ -15,6 +15,7 @@ class PickerInspection : Instrumentation() {
     private var mode: String? = null
     override fun onCreate(arguments: Bundle?) { mode = arguments?.getString("mode"); super.onCreate(arguments); start() }
     override fun onStart() {
+        if (mode == "navigation") { inspectNavigation(); return }
         if (mode == "startup") { inspectStartup(); return }
         var service: TikTokTransferService? = null
         var resultCode = android.app.Activity.RESULT_CANCELED
@@ -67,6 +68,39 @@ class PickerInspection : Instrumentation() {
             }
         }
         finish(resultCode, result)
+    }
+    /** Uses the service's inspect-only path: navigation and metadata, zero sticker taps. */
+    private fun inspectNavigation() {
+        val result = Bundle()
+        var code = android.app.Activity.RESULT_CANCELED
+        try {
+            getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+            repeat(100) { if (TikTokTransferService.instance == null) Thread.sleep(200) }
+            val service = TikTokTransferService.instance ?: error("Enable Sticker Sync accessibility first")
+            val prefs = targetContext.getSharedPreferences("transfer", 0)
+            val started = android.os.SystemClock.elapsedRealtime()
+            runOnMainSync {
+                service.begin(prefs.getString("selfId", "").orEmpty(), prefs.getString("handle", "").orEmpty(),
+                    prefs.getString("selfName", "").orEmpty(), diagnostic = true)
+            }
+            val deadline = started + 65_000
+            var message = ""
+            while (android.os.SystemClock.elapsedRealtime() < deadline) {
+                runOnMainSync { message = com.example.stickerpackbuilder.sync.TransferState.status.value?.message.orEmpty() }
+                if (message == "Sticker-list inspection finished. Nothing was sent.") break
+                if (message.contains("Nothing was sent.") || message.contains("Couldn't confirm")) error(message)
+                Thread.sleep(100)
+            }
+            check(message == "Sticker-list inspection finished. Nothing was sent.") { "Navigation did not finish: $message" }
+            check(com.example.stickerpackbuilder.sync.TransferState.copied == 0) { "Unexpected sticker tap" }
+            result.putString("result", JSONObject().put("navigationReadyMs", android.os.SystemClock.elapsedRealtime() - started)
+                .put("sent", 0).toString())
+            code = android.app.Activity.RESULT_OK
+        } catch (error: Throwable) { result.putString("error", error.message ?: error.toString()) }
+        finally {
+            runOnMainSync { TikTokTransferService.instance?.cancel() }
+        }
+        finish(code, result)
     }
     private fun inspectStartup() {
         var activity: android.app.Activity? = null

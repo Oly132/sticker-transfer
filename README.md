@@ -24,7 +24,9 @@ When the app is opened, it checks this repository's latest stable GitHub Release
 
 Yes downloads the APK, checks size, GitHub's SHA-256 digest when supplied, the package identity, an increased Android version code, and the installed signing certificate. Then Android's installer asks the user to approve installation. Android may first ask the user to allow installs from Sticker Sync. The app cannot silently install itself, bypass this approval, or guarantee an automatic restart. Updating over the existing app keeps its stored logins and collection.
 
-No GitHub login or API token is included in the app. Failed update checks do not block transfers. Checks and downloads do not interrupt an active transfer. This version uses optional prompts, not mandatory countdown updates.
+No GitHub login or API token is included in the app. Failed update checks do not block transfers unless a required update was already discovered and cached. Checks and downloads do not interrupt an active transfer.
+
+Starting with **4.7.3**, a release containing the exact marker `<!-- mandatory-update -->` in its notes requires installation before starting another transfer. It shows **Update required** with **Update now** or **Close app**, cannot be dismissed with Back or an outside tap, and ignores an earlier optional dismissal of that release. Closing the update page closes the app; download/installation failures offer retry. The requirement remains cached while offline until a successful check removes or replaces it. Android still requires installation confirmation. Versions **4.7–4.7.2** predate this policy and can only offer their existing optional Yes/No prompt, even for a marked release.
 
 ## Publish an update
 
@@ -40,6 +42,8 @@ The Windows helper validates the package, tag and signing certificate, then publ
 ```powershell
 $env:JAVA_HOME = 'C:/Program Files/Android/Android Studio/jbr'
 ./scripts/publish-release.ps1 -Tag v4.8.0 -Apk ./app/build/outputs/apk/prototype/app-prototype.apk -NotesFile ./my-release-notes.md
+# Require this release for clients running 4.7.3 or newer:
+./scripts/publish-release.ps1 -Tag v4.8.0 -Apk ./app/build/outputs/apk/prototype/app-prototype.apk -NotesFile ./my-release-notes.md -Mandatory
 ```
 
 Omit `-Apk` to build/test first using the Gradle wrapper. The helper requires GitHub CLI (`gh`) signed into the maintainer account and Android SDK build tools. It never uploads a signing key. Its release notes record the Android version code to reject accidental non-incrementing future releases.

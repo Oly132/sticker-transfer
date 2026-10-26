@@ -13,12 +13,13 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
-data class AppUpdate(val tag: String, val name: String, val url: String, val bytes: Long, val sha256: String?) {
-    fun json() = JSONObject().put("tag", tag).put("name", name).put("url", url).put("bytes", bytes).put("sha256", sha256 ?: "").toString()
+data class AppUpdate(val tag: String, val name: String, val url: String, val bytes: Long, val sha256: String?, val mandatory: Boolean = false) {
+    fun json() = JSONObject().put("tag", tag).put("name", name).put("url", url).put("bytes", bytes).put("sha256", sha256 ?: "").put("mandatory", mandatory).toString()
 }
 
 /** Only public release data is fetched. No GitHub token or account/session data is sent. */
 object GitHubUpdates {
+    const val MANDATORY_MARKER = "<!-- mandatory-update -->"
     const val REPOSITORY = "Oly132/sticker-transfer"
     const val API = "https://api.github.com/repos/$REPOSITORY/releases/latest"
     const val MAX_APK_BYTES = 250L * 1024 * 1024
@@ -66,16 +67,20 @@ object GitHubUpdates {
         val digest = apk.optString("digest").takeUnless { it.isBlank() || it == "null" }
         val hash = digest?.removePrefix("sha256:")?.lowercase()
         require(hash == null || digest!!.startsWith("sha256:") && hash.matches(Regex("[a-f0-9]{64}"))) { "This release has an invalid download checksum." }
-        return AppUpdate(tag, apk.optString("name"), url, bytes, hash)
+        return AppUpdate(tag, apk.optString("name"), url, bytes, hash, release.optString("body").contains(MANDATORY_MARKER))
     }
     fun restore(value: String): AppUpdate {
         require(value.length < 8192)
         val j = JSONObject(value)
-        val info = AppUpdate(j.getString("tag"), j.getString("name"), j.getString("url"), j.getLong("bytes"), j.optString("sha256").takeIf { it.isNotEmpty() })
+        val info = AppUpdate(j.getString("tag"), j.getString("name"), j.getString("url"), j.getLong("bytes"), j.optString("sha256").takeIf { it.isNotEmpty() }, j.optBoolean("mandatory"))
         require(version(info.tag) != null && trustedAsset(info.url) && info.bytes in 1..MAX_APK_BYTES)
         require(info.sha256 == null || info.sha256.matches(Regex("[a-f0-9]{64}")))
         return info
     }
+    fun requiredCached(context: Context): AppUpdate? = runCatching {
+        context.getSharedPreferences("app-updates", Context.MODE_PRIVATE).getString("release", null)
+            ?.let { parse(JSONObject(it), BuildConfig.VERSION_NAME) }?.takeIf { it.mandatory }
+    }.getOrNull()
     fun check(context: Context, force: Boolean = false): AppUpdate? {
         val prefs = context.getSharedPreferences("app-updates", Context.MODE_PRIVATE)
         val now = System.currentTimeMillis()

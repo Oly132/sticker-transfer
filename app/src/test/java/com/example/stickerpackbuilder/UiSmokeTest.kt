@@ -26,6 +26,23 @@ import java.io.File
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @LooperMode(LooperMode.Mode.PAUSED)
 class UiSmokeTest {
+    @Test fun requiredUpdateBlocksTransfersEvenIfTheReleaseWasPreviouslyDismissed() {
+        val release = org.json.JSONObject().put("tag_name", "v99.0.0")
+            .put("body", com.example.stickerpackbuilder.update.GitHubUpdates.MANDATORY_MARKER)
+            .put("assets", org.json.JSONArray().put(org.json.JSONObject().put("name", "StickerTransfer.apk")
+                .put("browser_download_url", "https://github.com/Oly132/sticker-transfer/releases/download/v99.0.0/StickerTransfer.apk")
+                .put("size", 100)))
+        context.getSharedPreferences("app-updates", 0).edit().putString("release", release.toString())
+            .putString("dismissedTag", "v99.0.0").putLong("checkedAt", System.currentTimeMillis()).commit()
+        val controller = Robolectric.buildActivity(com.example.stickerpackbuilder.sync.TransferActivity::class.java).setup()
+        try {
+            val activity = controller.get()
+            activity.javaClass.getDeclaredMethod("beginTransfer").apply { isAccessible = true }.invoke(activity)
+            val launched = shadowOf(activity).nextStartedActivity
+            assertEquals(com.example.stickerpackbuilder.update.UpdateActivity::class.java.name, launched.component!!.className)
+            assertTrue(com.example.stickerpackbuilder.update.GitHubUpdates.restore(launched.getStringExtra("update")!!).mandatory)
+        } finally { controller.pause().stop().destroy() }
+    }
     private val context = RuntimeEnvironment.getApplication()
     @Before fun clean() {
         context.filesDir.listFiles()?.forEach { it.deleteRecursively() }

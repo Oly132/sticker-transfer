@@ -32,6 +32,11 @@ class TikTokTransferService : AccessibilityService() {
     private val navigationWakeQueued = java.util.concurrent.atomic.AtomicBoolean()
     private val navigationSteps = setOf("verify-profile", "find-self-chat", "wait-chat", "saved-tab", "picker")
     private var attempts = 0
+    private var profileActionAt = 0L
+    private var profileBacks = 0
+    private var profileRelaunched = false
+    private var chatActionAt = 0L
+    private var chatReopened = false
     private var pages = 0
     private var savedTop = 0
     private var savedRow = -1
@@ -72,13 +77,13 @@ class TikTokTransferService : AccessibilityService() {
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.packageName?.toString() != TIKTOK || step !in navigationSteps || !navigationWakeQueued.compareAndSet(false, true)) return
         val ticket = generation.get()
-        automation.post {
+        automation.postDelayed({
             navigationWakeQueued.set(false)
             if (ticket == generation.get() && !cancelled() && step in navigationSteps) {
                 automation.removeCallbacks(tick)
-                automation.postDelayed(tick, 40)
+                tick.run()
             }
-        }
+        }, 40)
     }
     override fun onInterrupt() { android.util.Log.i("StickerTransfer", "Accessibility feedback interrupted; step=$step") }
     override fun onDestroy() {
@@ -106,7 +111,11 @@ class TikTokTransferService : AccessibilityService() {
         maximum = limit
         sentPositions.clear(); pageCandidates = emptyList(); savedRow = -1; pages = 0; attempts = 0; endChecks = 0; extractionStarted = 0; step = "verify-profile"
         update("Checking your TikTok account…")
-        open("https://www.tiktok.com/@$handle")
+        profileActionAt = android.os.SystemClock.uptimeMillis()
+        profileBacks = 0; profileRelaunched = false; chatActionAt = 0; chatReopened = false
+        // A public @handle deep link can expose a read-only profile even for the
+        // signed-in owner. Open TikTok normally and navigate to its own Profile tab.
+        openTikTok()
         automation.postDelayed(tick, 200)
         }
     }
@@ -131,6 +140,11 @@ class TikTokTransferService : AccessibilityService() {
         }
     }
     private fun open(uri: String) { onUi { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(TIKTOK).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) } }
+    private fun openTikTok() { onUi {
+        val intent = packageManager.getLaunchIntentForPackage(TIKTOK)
+            ?: error("Install TikTok and sign in before transferring.")
+        startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+    } }
     private fun nodes(root: AccessibilityNodeInfo): List<AccessibilityNodeInfo> {
         val list = mutableListOf<AccessibilityNodeInfo>()
         fun walk(n: AccessibilityNodeInfo, depth: Int) { if (cancelled() || depth > 35 || list.size > 2000) return; list += n; for (i in 0 until n.childCount) n.getChild(i)?.let { walk(it, depth + 1) } }
@@ -157,6 +171,21 @@ class TikTokTransferService : AccessibilityService() {
     }
     private fun performScroll(n: AccessibilityNodeInfo, action: Int) = !cancelled() && n.performAction(action)
     private fun navigationTimedOut(milliseconds: Long) = android.os.SystemClock.uptimeMillis() - stepStartedAt >= milliseconds
+    private fun inConversationList(node: AccessibilityNodeInfo): Boolean {
+        var parent = node.parent
+        repeat(7) {
+            if (parent?.className?.toString() == "androidx.recyclerview.widget.RecyclerView") return true
+            parent = parent?.parent
+        }
+        return false
+    }
+    private fun labels(nodes: List<AccessibilityNodeInfo>) = nodes.flatMap {
+        listOfNotNull(it.text?.toString(), it.contentDescription?.toString())
+    }
+    private fun ownChatName(nodes: List<AccessibilityNodeInfo>) = labels(nodes).any {
+        NativeChatNavigation.matchesName(it, TransferState.selfName) ||
+            NativeChatNavigation.name(it).removePrefix("@").equals(TransferState.selfHandle, true)
+    }
     private fun advance() {
         if (cancelled()) return
         val root = nativeRoot() ?: run {
@@ -166,40 +195,67 @@ class TikTokTransferService : AccessibilityService() {
         }
         val all = if (step == "copy") emptyList() else nodes(root)
         if (step == "verify-profile") {
-            android.util.Log.d("StickerTransfer", "Native profile: nodes=${all.size}, edit=${all.any { label(it).contains("Edit profile", true) }}, handle=${all.any { label(it).removePrefix("@") == TransferState.selfHandle }}")
-            val editable = all.any { label(it).equals("Edit profile", true) } ||
-                (all.any { label(it) == "Create a Story" } && all.any { label(it) == "Private videos" })
-            if (editable && all.any { label(it).removePrefix("@") == TransferState.selfHandle }) {
+            // Some TikTok builds expose text and accessibility descriptions on
+            // the same node. An empty description must not hide visible text.
+            val labels = all.flatMap { listOfNotNull(it.text?.toString(), it.contentDescription?.toString()) }
+            if (NativeProfileCheck.verified(labels, TransferState.selfHandle)) {
                 step = "find-self-chat"; attempts = 0
                 val inbox = all.singleOrNull { it.isClickable && label(it) == "Inbox" }
                 if (inbox == null || !click(inbox)) open("snssdk1233://chatting/message")
                 update("Opening your private self-chat…")
             } else {
-                attempts++
-                if (attempts == 5) all.singleOrNull { it.isClickable && label(it) == "Profile" }?.let { click(it) }
-                if (navigationTimedOut(14_000)) fail("Could not verify your own TikTok profile. Sign into the same account in TikTok and Sticker Sync.")
+                val now = android.os.SystemClock.uptimeMillis()
+                // Retry by elapsed time: startup events can arrive before the
+                // navigation bar exists. A one-shot attempt counter missed it.
+                if (now - profileActionAt >= 900) {
+                    profileActionAt = now
+                    val profile = all.firstOrNull { it.isClickable &&
+                        (NativeProfileCheck.isProfileTab(it.text?.toString().orEmpty()) ||
+                         NativeProfileCheck.isProfileTab(it.contentDescription?.toString().orEmpty())) }
+                    if (profile != null) click(profile)
+                    else if (navigationTimedOut(2_000) && !NativeProfileCheck.isOwnProfile(labels) && profileBacks < 3) {
+                        performGlobalAction(GLOBAL_ACTION_BACK); profileBacks++
+                    } else if (!profileRelaunched && navigationTimedOut(6_000)) {
+                        profileRelaunched = true; profileBacks = 0; openTikTok()
+                    }
+                }
+                if (navigationTimedOut(18_000)) fail("Couldn't confirm your TikTok account. Open your own Profile in TikTok, then try again. Make sure both apps use the same account.")
             }
             return
         }
         if (step == "find-self-chat") {
-            val matches = all.filter { label(it) == TransferState.selfName && it.className?.toString() == "android.widget.TextView" }
-            if (matches.size == 1 && click(matches.single())) { step = "wait-chat"; attempts = 0 }
-            else {
-                attempts++
-                if (attempts == 5) all.singleOrNull { it.isClickable && label(it) == "Inbox" }?.let { click(it) }
-                if (navigationTimedOut(14_000)) fail("Your self-chat couldn't be uniquely located. Nothing was sent.")
+            val hasEditor = all.any { it.className?.toString() == "android.widget.EditText" }
+            val ownProfile = NativeProfileCheck.isOwnProfile(labels(all))
+            if (hasEditor && ownChatName(all)) { step = "wait-chat"; attempts = 0; return }
+            val matches = all.filter {
+                it.className?.toString() == "android.widget.TextView" &&
+                    NativeChatNavigation.isRowName(it.text?.toString().orEmpty(), it.contentDescription?.toString().orEmpty(), it.viewIdResourceName, TransferState.selfName) &&
+                    NativeChatNavigation.canOpenRow(inConversationList(it), ownProfile, hasEditor)
             }
+            if (matches.size == 1 && click(matches.single())) {
+                step = "wait-chat"; attempts = 0; chatActionAt = android.os.SystemClock.uptimeMillis()
+            } else if (android.os.SystemClock.uptimeMillis() - chatActionAt >= 1_200) {
+                chatActionAt = android.os.SystemClock.uptimeMillis()
+                all.firstOrNull { it.isClickable && label(it) == "Inbox" }?.let { click(it) }
+            }
+            if (navigationTimedOut(14_000)) fail("Your self-chat couldn't be uniquely located. Nothing was sent.")
             return
         }
         if (step == "wait-chat") {
             attempts++
             val edit = all.any { it.className?.toString() == "android.widget.EditText" }
-            val ownName = all.any { label(it) == TransferState.selfName || label(it).removePrefix("@") == TransferState.selfHandle }
+            val ownName = ownChatName(all)
             if (edit && ownName) {
                 if (all.any { SavedStickerSelection.isTabRow(it.viewIdResourceName) }) { step = "saved-tab"; attempts = 0; return }
                 val button = all.firstOrNull { it.isClickable && SavedStickerSelection.isPickerButton(it.viewIdResourceName) }
                     ?: all.firstOrNull { it.className?.toString() == "android.widget.Button" && it.isClickable && (label(it).contains("emoji", true) || label(it).contains("sticker", true)) }
                 if (button != null && click(button)) { step = "saved-tab"; attempts = 0; update("Opening Saved stickers…") }
+            }
+            // If a row tap was lost during Inbox refresh, re-open the list once.
+            // Only retry navigation: this phase cannot send any sticker.
+            if (!edit && !chatReopened && navigationTimedOut(4_000)) {
+                chatReopened = true; step = "find-self-chat"; chatActionAt = android.os.SystemClock.uptimeMillis()
+                open("snssdk1233://chatting/message"); return
             }
             if (navigationTimedOut(14_000)) fail("Your self-chat or sticker picker did not open. Nothing was sent.")
             return

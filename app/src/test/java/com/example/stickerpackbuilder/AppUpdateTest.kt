@@ -13,6 +13,25 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class AppUpdateTest {
+    @Test fun mandatoryPolicyRequiresExplicitReleaseMarkerAndSurvivesSerialization() {
+        assertFalse(GitHubUpdates.parse(release().put("body", "Important mandatory update"), "4.7-samsung")!!.mandatory)
+        val required = GitHubUpdates.parse(release().put("body", GitHubUpdates.MANDATORY_MARKER), "4.7-samsung")!!
+        assertTrue(required.mandatory)
+        assertTrue(GitHubUpdates.restore(required.json()).mandatory)
+        val legacy = JSONObject(required.json()).apply { remove("mandatory") }
+        assertFalse(GitHubUpdates.restore(legacy.toString()).mandatory)
+    }
+    @Test fun knownRequiredUpdateRemainsRequiredOfflineButCannotBlockCurrentVersion() {
+        val context = RuntimeEnvironment.getApplication()
+        val prefs = context.getSharedPreferences("app-updates", 0)
+        prefs.edit().putString("release", release("v99.0.0").put("body", GitHubUpdates.MANDATORY_MARKER).toString()).commit()
+        assertTrue(GitHubUpdates.requiredCached(context)!!.mandatory)
+        prefs.edit().putString("release", release(BuildConfig.VERSION_NAME).put("body", GitHubUpdates.MANDATORY_MARKER).toString()).commit()
+        assertNull(GitHubUpdates.requiredCached(context))
+        prefs.edit().putString("release", "broken data").commit()
+        assertNull(GitHubUpdates.requiredCached(context))
+        prefs.edit().clear().commit()
+    }
     private val url = "https://github.com/Oly132/sticker-transfer/releases/download/v4.8.0/StickerTransfer.apk"
     private fun release(tag: String = "v4.8.0") = JSONObject().put("tag_name", tag).put("draft", false).put("prerelease", false)
         .put("assets", JSONArray().put(JSONObject().put("name", "StickerTransfer.apk").put("browser_download_url", url)

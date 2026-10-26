@@ -200,13 +200,18 @@ class TransferActivity : Screen() {
         val update = pendingUpdate ?: return
         if (!foreground || busy() || job?.isActive == true || automaticRun || waitingFor.isNotEmpty() || !window.decorView.hasWindowFocus()) return
         val settings = getSharedPreferences("app-updates", MODE_PRIVATE)
-        if (promptedUpdate == update.tag || settings.getString("dismissedTag", "") == update.tag) return
+        if (promptedUpdate == update.tag || (!update.mandatory && settings.getString("dismissedTag", "") == update.tag)) return
         promptedUpdate = update.tag
-        val dialog = guide("New update available", "Version ${update.tag.removePrefix("v")} is ready. Update now? Your stickers and logins will stay here.",
-            "Yes", {
+        val dialog = guide(if (update.mandatory) "Update required" else "New update available",
+            if (update.mandatory) "Install version ${update.tag.removePrefix("v")} to keep using transfers. Your stickers and logins will stay here. Android will ask you to confirm installation."
+            else "Version ${update.tag.removePrefix("v")} is ready. Update now? Your stickers and logins will stay here.",
+            if (update.mandatory) "Update now" else "Yes", {
                 startActivity(Intent(this, com.example.stickerpackbuilder.update.UpdateActivity::class.java).putExtra("update", update.json()))
-            }, secondary = "No")
+            }, secondary = if (update.mandatory) "Close app" else "No")
+        dialog.setCancelable(!update.mandatory)
+        dialog.setCanceledOnTouchOutside(!update.mandatory)
         dialog.getButton(android.content.DialogInterface.BUTTON_NEGATIVE)?.setOnClickListener {
+                if (update.mandatory) { dialog.dismiss(); finishAffinity(); return@setOnClickListener }
                 settings.edit().putString("dismissedTag", update.tag).apply()
                 dialog.dismiss()
             }
@@ -263,6 +268,13 @@ class TransferActivity : Screen() {
     }
     private fun beginTransfer() {
         if (job?.isActive == true) return
+        val required = pendingUpdate?.takeIf { it.mandatory }
+            ?: com.example.stickerpackbuilder.update.GitHubUpdates.requiredCached(this)
+        if (required != null) {
+            if (automaticRun) { automaticRun = false; AutoTransfer.finished(this, false, "An app update is required before transferring.") }
+            startActivity(Intent(this, com.example.stickerpackbuilder.update.UpdateActivity::class.java).putExtra("update", required.json()))
+            return
+        }
         if (TikTokTransferService.instance == null) {
             if (automaticRun) { TransferState.update(TransferState.Phase.ERROR, "Auto transfer needs automation permission. Open the app and tap Transfer all."); return }
             showAutomationSetup()

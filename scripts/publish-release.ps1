@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory=$true)][string]$Tag,
     [string]$Apk,
     [string]$NotesFile,
-    [string]$GitHubCli = 'gh'
+    [string]$GitHubCli = 'gh',
+    [switch]$Mandatory
 )
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -56,6 +57,7 @@ if (!$NotesFile) {
 }
 $preparedNotes = Join-Path $releaseDir 'published-notes.md'
 $notesText = [IO.File]::ReadAllText((Resolve-Path -LiteralPath $NotesFile).Path)
+if ($Mandatory -and !$notesText.Contains('<!-- mandatory-update -->')) { $notesText += "`n`n<!-- mandatory-update -->" }
 [IO.File]::WriteAllText($preparedNotes, "$notesText`n`n<!-- android-version-code: $versionCode -->`n", [Text.UTF8Encoding]::new($false))
 & $GitHubCli release create $Tag $releaseApk $checksum --repo Oly132/sticker-transfer --title "Sticker Transfer $Tag" --notes-file $preparedNotes --latest
 if ($LASTEXITCODE -ne 0) { throw 'GitHub release publishing failed. Check the repository before retrying.' }
