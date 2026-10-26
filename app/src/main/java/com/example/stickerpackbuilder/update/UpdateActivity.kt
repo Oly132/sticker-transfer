@@ -115,6 +115,10 @@ class UpdateActivity : Screen() {
         model.start(initial, download = initial != null)
     }
     private fun install() {
+        if (com.example.stickerpackbuilder.sync.AutoTransfer.active()) {
+            message("Finish or stop the current sticker transfer before installing this update.")
+            return
+        }
         val file = model.state.value?.file?.takeIf { it.isFile } ?: return
         if (!packageManager.canRequestPackageInstalls()) {
             if (waitingForPermission) return

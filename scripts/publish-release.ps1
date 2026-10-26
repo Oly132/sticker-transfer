@@ -26,7 +26,7 @@ if (!($signature -match [regex]::Escape($expected))) { throw 'Signing key differ
 $badging = & (Join-Path $tools.FullName 'aapt2.exe') dump badging $apkPath
 if ($LASTEXITCODE -ne 0) { throw 'Cannot read the APK metadata.' }
 $line = $badging | Where-Object { $_ -match '^package:' } | Select-Object -First 1
-if ($line -notmatch "name='com.example.stickerpackbuilder.samsunglab'.*versionCode='([0-9]+)'.*versionName='([^']+)'") { throw 'Unexpected app package.' }
+if ($line -notmatch "name='com\.example\.stickerpackbuilder\.samsunglab'.*versionCode='([0-9]+)'.*versionName='([^']+)'") { throw 'Unexpected app package.' }
 $versionCode = [long]$Matches[1]
 $versionName = $Matches[2] -replace '-samsung$',''
 function Normalize-Version([string]$Value) { return (($Value.TrimStart('v').Split('.') + @('0','0') | Select-Object -First 3) -join '.') }

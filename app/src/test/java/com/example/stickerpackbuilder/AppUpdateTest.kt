@@ -64,4 +64,16 @@ class AppUpdateTest {
         val provider = context.packageManager.resolveContentProvider(context.packageName + ".updates", 0)!!
         assertFalse(provider.exported); assertTrue(provider.grantUriPermissions)
     }
+    @Test fun updateUriCannotExposeOtherCacheFilesOrPrivateAccountFiles() {
+        val context = RuntimeEnvironment.getApplication()
+        val update = java.io.File(context.cacheDir, "updates/update.apk").apply { parentFile!!.mkdirs(); writeText("fixture") }
+        val uri = androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".updates", update)
+        assertEquals("content", uri.scheme)
+        assertThrows(IllegalArgumentException::class.java) {
+            androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".updates", java.io.File(context.filesDir, "account.json"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            androidx.core.content.FileProvider.getUriForFile(context, context.packageName + ".updates", java.io.File(context.cacheDir, "other.txt"))
+        }
+    }
 }
