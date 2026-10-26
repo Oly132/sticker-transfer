@@ -26,9 +26,10 @@ if (!($signature -match [regex]::Escape($expected))) { throw 'Signing key differ
 $badging = & (Join-Path $tools.FullName 'aapt2.exe') dump badging $apkPath
 if ($LASTEXITCODE -ne 0) { throw 'Cannot read the APK metadata.' }
 $line = $badging | Where-Object { $_ -match '^package:' } | Select-Object -First 1
-if ($line -notmatch "name='com\.example\.stickerpackbuilder\.samsunglab'.*versionCode='([0-9]+)'.*versionName='([^']+)'") { throw 'Unexpected app package.' }
-$versionCode = [long]$Matches[1]
-$versionName = $Matches[2] -replace '-samsung$',''
+$packageMatch = [regex]::Match($line, "^package:\s+name='(?<package>[^']+)'\s+versionCode='(?<code>[0-9]+)'\s+versionName='(?<version>[^']+)'")
+if (!$packageMatch.Success -or $packageMatch.Groups['package'].Value -cne 'com.example.stickerpackbuilder.samsunglab') { throw 'Unexpected app package.' }
+$versionCode = [long]$packageMatch.Groups['code'].Value
+$versionName = $packageMatch.Groups['version'].Value -replace '-samsung$',''
 function Normalize-Version([string]$Value) { return (($Value.TrimStart('v').Split('.') + @('0','0') | Select-Object -First 3) -join '.') }
 if ((Normalize-Version $Tag) -ne (Normalize-Version $versionName)) { throw 'Release tag does not match the APK version.' }
 $latestRaw = & $GitHubCli api repos/Oly132/sticker-transfer/releases/latest 2>$null
