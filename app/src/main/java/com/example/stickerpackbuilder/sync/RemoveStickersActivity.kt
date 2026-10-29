@@ -31,22 +31,25 @@ class RemoveStickersActivity : Screen() {
         column.setBackgroundColor(0xff0d1420.toInt())
         toolbar("Manage your stickers")
         column.setPadding(dp(18), 0, dp(18), dp(16))
-        column.addView(title("Make room for favourites."))
-        column.addView(text("Select stickers you added with Sticker Sync to remove from WhatsApp favourites.", 14f, true))
-        space(column, 12)
+        val intro=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
+        intro.addView(title("Make room for favourites."))
+        intro.addView(text("Select stickers you added with Sticker Sync to remove from WhatsApp favourites.", 14f, true))
+        space(intro, 12)
         status = text("Loading your collection…", 14f).apply { accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE }
-        column.addView(status, LinearLayout.LayoutParams(-1, -2))
-        space(column, 8)
+        intro.addView(status, LinearLayout.LayoutParams(-1, -2))
+        space(intro, 8)
+        val selection=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
         selectAll = button("Select all", true) {
             if (running || entries.isEmpty()) return@button
             val available = entries.map { it.getString("whatsappHash") }.toSet()
             if (selected.containsAll(available)) selected.clear() else selected.addAll(available)
             updateSelection(); grid.adapter?.notifyDataSetChanged()
         }.apply { isEnabled = false }
-        column.addView(selectAll, LinearLayout.LayoutParams(-1, dp(50)))
-        space(column, 8)
+        selection.addView(selectAll, LinearLayout.LayoutParams(-1, dp(50)))
+        space(selection, 8)
         grid = RecyclerView(this).apply { layoutManager = androidx.recyclerview.widget.GridLayoutManager(this@RemoveStickersActivity, 3) }
-        column.addView(grid, LinearLayout.LayoutParams(-1, 0, 1f))
+        selection.addView(grid, LinearLayout.LayoutParams(-1, 0, 1f))
+        column.addView(com.example.stickerpackbuilder.ui.ScrollingGallery(this,intro,selection).view, LinearLayout.LayoutParams(-1, 0, 1f))
         action = button("Select stickers to remove") {
             guide("Remove ${selected.size} ${if (selected.size == 1) "favourite" else "favourites"}?",
                 "These stickers will be removed from WhatsApp favourites. You can transfer them again later.",
@@ -65,13 +68,13 @@ class RemoveStickersActivity : Screen() {
                 override fun onCreateViewHolder(parent: android.view.ViewGroup, type: Int): Tile {
                     val card = MaterialCardView(this@RemoveStickersActivity).apply {
                         radius = dp(16).toFloat(); cardElevation = 0f; strokeWidth = dp(1)
-                        setCardBackgroundColor(0xff1b2b3d.toInt())
+                        setCardBackgroundColor(com.example.stickerpackbuilder.ui.Polish.SURFACE)
                         com.example.stickerpackbuilder.ui.Motion.press(this)
                         layoutParams = RecyclerView.LayoutParams(-1, dp(136)).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) }
                     }
                     val box = LinearLayout(this@RemoveStickersActivity).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), dp(8), dp(8), 0) }
                     val image = ImageView(this@RemoveStickersActivity).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
-                    val check = CheckBox(this@RemoveStickersActivity).apply { text = "Select"; textSize = 11f; setTextColor(-1) }
+                    val check = com.google.android.material.checkbox.MaterialCheckBox(this@RemoveStickersActivity).apply { text = "Select"; textSize = 11f; setTextColor(-1);com.example.stickerpackbuilder.ui.Polish.selection(this) }
                     box.addView(image, LinearLayout.LayoutParams(-1, 0, 1f)); box.addView(check)
                     card.addView(box, FrameLayout.LayoutParams(-1, -1))
                     return Tile(card, image, check)
@@ -81,7 +84,7 @@ class RemoveStickersActivity : Screen() {
                     val preview = TransferredGallery(this@RemoveStickersActivity).preview(entry)
                     com.bumptech.glide.Glide.with(holder.image).clear(holder.image)
                     if (preview.exists()) com.bumptech.glide.Glide.with(holder.image).asBitmap().load(preview).override(dp(100), dp(100)).into(holder.image)
-                    else holder.image.setImageResource(android.R.drawable.ic_menu_gallery)
+                    else holder.image.setImageResource(com.example.stickerpackbuilder.R.drawable.ic_ui_sticker)
                     holder.check.setOnCheckedChangeListener(null)
                     holder.check.isChecked = hash in selected; holder.check.isEnabled = !running
                     holder.card.isEnabled = !running
@@ -109,6 +112,7 @@ class RemoveStickersActivity : Screen() {
         selectAll.contentDescription = if (selectAll.text == "Clear selection") "Clear sticker removal selection" else "Select all ${entries.size} stickers for removal"
         action.isEnabled = !running && selected.isNotEmpty()
         action.text = if (running) "Removing…" else if (selected.isEmpty()) "Select stickers to remove" else "Remove ${selected.size} from WhatsApp"
+        com.example.stickerpackbuilder.ui.Polish.syncIcon(action);com.example.stickerpackbuilder.ui.Polish.syncIcon(selectAll)
         if (!running) status.text = "${selected.size} selected · ${entries.size} in your collection"
     }
     private fun removeSelected() {

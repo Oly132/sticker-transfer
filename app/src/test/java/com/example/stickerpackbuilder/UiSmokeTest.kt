@@ -48,6 +48,8 @@ class UiSmokeTest {
         context.filesDir.listFiles()?.forEach { it.deleteRecursively() }
         WorkManagerTestInitHelper.initializeTestWorkManager(context)
         context.getSharedPreferences("auto-transfer", 0).edit().clear().commit()
+        context.getSharedPreferences("transfer-ui",0).edit().clear().commit()
+        com.example.stickerpackbuilder.reverse.ReverseState.active=false
         // UI rendering tests use a cached current release, never a live GitHub request.
         context.getSharedPreferences("app-updates", 0).edit().clear()
             .putLong("checkedAt", System.currentTimeMillis())
@@ -74,6 +76,25 @@ class UiSmokeTest {
         File(dir, "$name.png").outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
         bitmap.recycle()
     }
+    private fun checkScrollingGallery(activity: android.app.Activity, name: String) {
+        val views=all(activity.window.decorView)
+        val grid=views.filterIsInstance<androidx.recyclerview.widget.RecyclerView>().single{it.isShown}
+        val appBar=views.filterIsInstance<com.google.android.material.appbar.AppBarLayout>().single{it.isShown}
+        val original=android.graphics.Rect().also{assertTrue(grid.getGlobalVisibleRect(it))}
+        assertTrue(grid.startNestedScroll(androidx.core.view.ViewCompat.SCROLL_AXIS_VERTICAL))
+        val consumed=IntArray(2)
+        grid.dispatchNestedPreScroll(0,2000,consumed,null)
+        assertTrue(consumed[1]>0)
+        grid.stopNestedScroll()
+        capture(activity,"$name-scrolled")
+        val expanded=android.graphics.Rect().also{assertTrue(grid.getGlobalVisibleRect(it))}
+        assertTrue("Normal scrolling should make more room for the grid",expanded.top<original.top)
+        val headerBounds=android.graphics.Rect()
+        if(appBar.getGlobalVisibleRect(headerBounds))assertFalse("Header must not cover stickers",android.graphics.Rect.intersects(headerBounds,expanded))
+        assertTrue(grid.startNestedScroll(androidx.core.view.ViewCompat.SCROLL_AXIS_VERTICAL))
+        grid.dispatchNestedPreScroll(0,-2000,IntArray(2),null)
+        grid.stopNestedScroll();capture(activity,"$name-returned")
+    }
     private fun seed(): File {
         val source = File(context.cacheDir, "still.png")
         javaClass.classLoader!!.getResourceAsStream("still.png")!!.use { input -> source.outputStream().use { input.copyTo(it) } }
@@ -94,6 +115,16 @@ class UiSmokeTest {
         settings.pause().stop().destroy()
         val surface = com.example.stickerpackbuilder.sync.TransferCover.create(context) {}
         captureView(surface.view, "transfer-cover")
+        val reverseCover=com.example.stickerpackbuilder.sync.TransferCover.create(context,true) {}
+        reverseCover.progress(0,3)
+        assertEquals("0 / 3",reverseCover.counter.text.toString())
+        reverseCover.status.text="Adding to TikTok…"
+        reverseCover.progress(1,3)
+        assertEquals("1 / 3",reverseCover.counter.text.toString())
+        assertEquals("Adding to TikTok…",reverseCover.status.text.toString())
+        captureView(reverseCover.view,"reverse-transfer-progress")
+        reverseCover.progress(3,3)
+        assertEquals("3 / 3",reverseCover.counter.text.toString())
         val home = Robolectric.buildActivity(com.example.stickerpackbuilder.sync.TransferActivity::class.java).setup()
         capture(home.get(), "home-empty")
         com.example.stickerpackbuilder.sync.TransferState.update(com.example.stickerpackbuilder.sync.TransferState.Phase.COMPLETE, "Your stickers are in WhatsApp.")
@@ -102,17 +133,160 @@ class UiSmokeTest {
         val link = Robolectric.buildActivity(com.example.stickerpackbuilder.sync.LinkWhatsAppActivity::class.java).setup()
         val field = all(link.get().window.decorView).filterIsInstance<com.google.android.material.textfield.TextInputLayout>().single()
         field.editText!!.setText("31")
-        all(link.get().window.decorView).filterIsInstance<android.widget.Button>().single { it.text.toString() == "Get linking code" }.performClick()
+        all(link.get().window.decorView).filterIsInstance<android.widget.Button>().single { it.text.toString() == "Link WhatsApp" }.performClick()
         assertNotNull(field.error)
         capture(link.get(), "link-number-validation")
         link.pause().stop().destroy()
+    }
+    @Test fun whatsappLinkKeepsCodeAndOtherPhoneFallbackAfterRecreation() {
+        val saved = android.os.Bundle().apply {
+            putString("linkingCode", "ABCD1234")
+            putBoolean("otherPhone", true)
+        }
+        val controller = Robolectric.buildActivity(com.example.stickerpackbuilder.sync.LinkWhatsAppActivity::class.java)
+            .create(saved).start().resume().visible()
+        try {
+            val activity = controller.get()
+            val views = all(activity.window.decorView)
+            assertTrue(views.filterIsInstance<com.google.android.material.switchmaterial.SwitchMaterial>().single().isChecked)
+            assertTrue(views.filterIsInstance<TextView>().any { it.text.contains("Link with phone number instead") })
+            assertTrue(views.filterIsInstance<TextView>().any { it.text.contains("ABCD – 1234") })
+            assertNull(shadowOf(activity).nextStartedActivity)
+            views.filterIsInstance<android.widget.Button>().single { it.text.toString() == "Copy code" }.performClick()
+            val clipboard = activity.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            assertEquals("ABCD1234", clipboard.primaryClip!!.getItemAt(0).text.toString())
+            views.filterIsInstance<android.widget.Button>().single { it.text.toString() == "Open WhatsApp" }.performClick()
+            // No installed WhatsApp: keep the code and manual instructions instead of crashing or opening a browser.
+            assertNull(shadowOf(activity).nextStartedActivity)
+            assertEquals("ABCD1234", clipboard.primaryClip!!.getItemAt(0).text.toString())
+        } finally { controller.pause().stop().destroy() }
+    }
+    @Test fun directionSwitchKeepsTheSameDashboardAndDoesNotLaunchAnActivity() {
+        val controller=Robolectric.buildActivity(com.example.stickerpackbuilder.sync.TransferActivity::class.java).setup()
+        try{
+            val activity=controller.get();capture(activity,"direction-forward")
+            val glow=all(activity.window.decorView).filterIsInstance<com.example.stickerpackbuilder.sync.TransferGlow>().single()
+            val settings=all(activity.window.decorView).filterIsInstance<android.widget.Button>().single{it.text.toString()=="Settings"}
+            fun swap(){all(activity.window.decorView).filterIsInstance<android.widget.Button>().single{it.isShown&&it.contentDescription?.toString()?.startsWith("Reverse transfer direction")==true}.performClick();settle()}
+            swap();capture(activity,"direction-reverse")
+            assertNull(shadowOf(activity).nextStartedActivity)
+            assertSame(glow,all(activity.window.decorView).filterIsInstance<com.example.stickerpackbuilder.sync.TransferGlow>().single())
+            assertSame(settings,all(activity.window.decorView).filterIsInstance<android.widget.Button>().single{it.text.toString()=="Settings"})
+            assertTrue(all(activity.window.decorView).filterIsInstance<TextView>().any{it.isShown&&it.text.toString()=="From WhatsApp to TikTok. One little tap."})
+            activity.onBackPressedDispatcher.onBackPressed();settle()
+            assertFalse(activity.isFinishing)
+            assertTrue(all(activity.window.decorView).filterIsInstance<android.widget.Button>().any{it.isShown&&it.text.toString()=="Transfer all"})
+            assertNull(shadowOf(activity).nextStartedActivity)
+        }finally{controller.pause().stop().destroy()}
+    }
+    @Test fun reverseGalleryUsesExistingThemeAndSelectAllSkipsSubmittedStickers() {
+        context.getSharedPreferences("reverse",0).edit().clear().putString("destination","test.account").putBoolean("partialCatalogue",true).commit()
+        val root=File(context.filesDir,"reverse").apply{mkdirs()}
+        val rows=org.json.JSONArray()
+        repeat(4){i->
+            val image=Bitmap.createBitmap(32,32,Bitmap.Config.ARGB_8888).apply{eraseColor(listOf(android.graphics.Color.RED,android.graphics.Color.GREEN,android.graphics.Color.BLUE,android.graphics.Color.YELLOW)[i])}
+            val file=File(root,"fixture-$i.webp")
+            file.outputStream().use{@Suppress("DEPRECATION") image.compress(Bitmap.CompressFormat.WEBP,100,it)};image.recycle()
+            val id=com.example.stickerpackbuilder.reverse.ReverseRepository.hash(file)
+            val target=com.example.stickerpackbuilder.reverse.ReverseRepository(context).original(id).apply{parentFile!!.mkdirs()}
+            file.copyTo(target,true)
+            rows.put(org.json.JSONObject().put("id",id).put("observedAt",i).put("fromTikTok",i==3))
+            if(i==0)com.example.stickerpackbuilder.reverse.ReverseHistory.record(context,org.json.JSONObject().put("sourceId",id).put("submitted",true).put("result","Create requested; confirmation pending"))
+        }
+        val local=File(root,"local-only.webp")
+        val localImage=Bitmap.createBitmap(32,32,Bitmap.Config.ARGB_8888).apply{eraseColor(android.graphics.Color.MAGENTA)}
+        local.outputStream().use{@Suppress("DEPRECATION") localImage.compress(Bitmap.CompressFormat.WEBP,100,it)};localImage.recycle()
+        val localId=com.example.stickerpackbuilder.reverse.ReverseRepository.hash(local)
+        rows.put(org.json.JSONObject().put("id",localId).put("observedAt",5))
+        com.example.stickerpackbuilder.reverse.LocalOriginalsTest.connect(context,mapOf("local" to local))
+        File(root,"catalogue.json").writeText(rows.toString())
+        val controller=Robolectric.buildActivity(com.example.stickerpackbuilder.sync.TransferActivity::class.java,
+            Intent(context,com.example.stickerpackbuilder.sync.TransferActivity::class.java).putExtra(com.example.stickerpackbuilder.sync.TransferActivity.DIRECTION_EXTRA,true)).setup()
+        try{
+            val activity=controller.get();capture(activity,"reverse-gallery")
+            assertTrue(all(activity.window.decorView).filterIsInstance<TextView>().any{it.text.toString().contains("Some favourites may be missing")})
+            assertTrue(com.example.stickerpackbuilder.reverse.ReverseRepository(context).verified(localId))
+            assertEquals(4,all(activity.window.decorView).filterIsInstance<androidx.recyclerview.widget.RecyclerView>().single{it.isShown}.adapter!!.itemCount)
+            assertFalse(all(activity.window.decorView).filterIsInstance<TextView>().any{it.text.toString().contains("From TikTok already")})
+            val buttons=all(activity.window.decorView).filterIsInstance<android.widget.Button>()
+            buttons.single{it.text.toString()=="Select all"}.performClick()
+            assertTrue(all(activity.window.decorView).filterIsInstance<TextView>().any{it.text.toString()=="Transfer 3 selected"})
+            val retainedList=all(activity.window.decorView).filterIsInstance<androidx.recyclerview.widget.RecyclerView>().single{it.isShown}
+            fun visibleGalleryHeight():Int {
+                val bounds=android.graphics.Rect()
+                retainedList.getGlobalVisibleRect(bounds)
+                return bounds.height()
+            }
+            val collapsedHeight=visibleGalleryHeight()
+            val transfer=all(activity.window.decorView).filterIsInstance<android.widget.Button>().single{it.isShown&&it.text.toString()=="Transfer 3 selected"}
+            val transferBounds=android.graphics.Rect()
+            assertTrue(transfer.getGlobalVisibleRect(transferBounds))
+            assertEquals(transfer.height,transferBounds.height())
+            val consumed=IntArray(2)
+            assertTrue(retainedList.startNestedScroll(androidx.core.view.ViewCompat.SCROLL_AXIS_VERTICAL))
+            retainedList.dispatchNestedPreScroll(0,activity.dp(500),consumed,null)
+            assertTrue("Scrolling the grid should collapse the header",consumed[1]>0)
+            retainedList.stopNestedScroll()
+            capture(activity,"reverse-gallery-expanded")
+            assertTrue("Expanded gallery should have more room for tiles",visibleGalleryHeight()>collapsedHeight)
+            assertTrue(all(activity.window.decorView).filterIsInstance<android.widget.Button>().any{it.isShown&&it.text.toString()=="Transfer 3 selected"})
+            assertFalse(all(activity.window.decorView).any{it.contentDescription=="Expand sticker gallery"})
+            assertFalse(all(activity.window.decorView).any{it.contentDescription=="Collapse sticker gallery"})
+            assertTrue(retainedList.startNestedScroll(androidx.core.view.ViewCompat.SCROLL_AXIS_VERTICAL))
+            consumed.fill(0)
+            retainedList.dispatchNestedPreScroll(0,-activity.dp(600),consumed,null)
+            assertTrue("Scrolling down should reveal the header",consumed[1]<0)
+            retainedList.stopNestedScroll()
+            capture(activity,"reverse-gallery-collapsed")
+            assertTrue(visibleGalleryHeight()<activity.window.decorView.height-activity.dp(200))
+            assertSame(retainedList,all(activity.window.decorView).filterIsInstance<androidx.recyclerview.widget.RecyclerView>().single{it.isShown})
+            activity.showTransferDirection(false);activity.showTransferDirection(true);settle()
+            assertSame(retainedList,all(activity.window.decorView).filterIsInstance<androidx.recyclerview.widget.RecyclerView>().single{it.isShown})
+            assertTrue(all(activity.window.decorView).filterIsInstance<TextView>().any{it.isShown&&it.text.toString()=="Transfer 3 selected"})
+            assertNull(shadowOf(activity).nextStartedActivity)
+            buttons.single{it.text.toString()=="Clear"}.performClick()
+            assertTrue(all(activity.window.decorView).filterIsInstance<TextView>().any{it.text.toString()=="Transfer 3 new stickers"})
+            capture(activity,"reverse-selected-cleared")
+        }finally{controller.pause().stop().destroy()}
+    }
+    @Test fun reverseChoicesSurviveRecreationWhileTheForwardDirectionIsVisible() {
+        context.getSharedPreferences("reverse",0).edit().clear().putString("destination","test.account").commit()
+        val repo=com.example.stickerpackbuilder.reverse.ReverseRepository(context)
+        val rows=org.json.JSONArray()
+        repeat(2){index->
+            val bitmap=Bitmap.createBitmap(32,32,Bitmap.Config.ARGB_8888).apply{eraseColor(if(index==0)android.graphics.Color.RED else android.graphics.Color.BLUE)}
+            val source=File(context.cacheDir,"direction-$index.webp")
+            source.outputStream().use{@Suppress("DEPRECATION") bitmap.compress(Bitmap.CompressFormat.WEBP,100,it)};bitmap.recycle()
+            val id=com.example.stickerpackbuilder.reverse.ReverseRepository.hash(source)
+            source.copyTo(repo.original(id).apply{parentFile!!.mkdirs()},true)
+            rows.put(org.json.JSONObject().put("id",id).put("observedAt",index))
+        }
+        File(context.filesDir,"reverse/catalogue.json").writeText(rows.toString())
+        var controller=Robolectric.buildActivity(com.example.stickerpackbuilder.sync.TransferActivity::class.java,
+            Intent(context,com.example.stickerpackbuilder.sync.TransferActivity::class.java).putExtra(com.example.stickerpackbuilder.sync.TransferActivity.DIRECTION_EXTRA,true)).setup()
+        try{
+            capture(controller.get(),"direction-selection")
+            all(controller.get().window.decorView).filterIsInstance<android.widget.Button>().single{it.isShown&&it.text.toString()=="Select all"}.performClick()
+            controller.get().showTransferDirection(false)
+            repeat(2){
+                val state=android.os.Bundle();val originalIntent=Intent(controller.get().intent)
+                controller.pause().stop().saveInstanceState(state).destroy()
+                controller=Robolectric.buildActivity(com.example.stickerpackbuilder.sync.TransferActivity::class.java,originalIntent).create(state).start().resume().visible()
+                settle()
+                assertTrue(all(controller.get().window.decorView).filterIsInstance<android.widget.Button>().any{it.isShown&&it.text.toString()=="Transfer all"})
+            }
+            controller.get().showTransferDirection(true);capture(controller.get(),"direction-selection-restored")
+            assertTrue(all(controller.get().window.decorView).filterIsInstance<android.widget.Button>().any{it.isShown&&it.text.toString()=="Transfer 2 selected"})
+            assertNull(shadowOf(controller.get()).nextStartedActivity)
+        }finally{controller.pause().stop().destroy()}
     }
     @Test fun homeReviewAndPackEditorOpenWithRealAssets() {
         val sticker = seed()
         com.example.stickerpackbuilder.sync.TransferredGallery(context).remember("https://p16.ibyteimg.com/tos/ui-sticker", sticker, false)
         val home = Robolectric.buildActivity(com.example.stickerpackbuilder.sync.TransferActivity::class.java).setup()
         capture(home.get(), "home")
-        assertEquals(4, all(home.get().window.decorView).filterIsInstance<android.widget.Button>().size)
+        checkScrollingGallery(home.get(),"forward-gallery")
+        assertEquals(5, all(home.get().window.decorView).filterIsInstance<android.widget.Button>().count{it.isShown})
         assertTrue(all(home.get().window.decorView).filterIsInstance<TextView>().any { it.text.toString() == "Transfer all" })
         assertTrue(all(home.get().window.decorView).filterIsInstance<TextView>().any { it.text.toString() == "Your collection · 1" })
         home.pause().stop().destroy()
@@ -277,6 +451,7 @@ class UiSmokeTest {
             .put("catalog", org.json.JSONArray(listOf(first, second))).toString())
         val picker = Robolectric.buildActivity(com.example.stickerpackbuilder.sync.ChooseStickersActivity::class.java).setup()
         capture(picker.get(), "custom")
+        checkScrollingGallery(picker.get(),"custom-gallery")
         val boxes = all(picker.get().window.decorView).filterIsInstance<android.widget.CheckBox>()
         assertEquals(2, boxes.size)
         assertFalse(boxes[0].isEnabled); assertTrue(boxes[1].isEnabled)
@@ -314,6 +489,7 @@ class UiSmokeTest {
             android.util.Base64.encodeToString(ByteArray(32) { number.toByte() }, android.util.Base64.NO_WRAP)) }
         val picker = Robolectric.buildActivity(com.example.stickerpackbuilder.sync.RemoveStickersActivity::class.java).setup()
         capture(picker.get(), "remove-stickers")
+        checkScrollingGallery(picker.get(),"remove-gallery")
         val checks = all(picker.get().window.decorView).filterIsInstance<android.widget.CheckBox>()
         assertEquals(3, checks.size)
         checks[0].performClick(); checks[2].performClick()

@@ -37,4 +37,17 @@ class SavedSelectionTest {
         assertFalse(SavedStickerSelection.isTabRow("another.app:id/hgx"))
         assertFalse(SavedStickerSelection.isSavedGrid(prefix + "official_pack"))
     }
+    @Test fun tiktok475SavedLayoutStillExcludesRecentsAddTileAndOtherPacks() {
+        assertTrue(SavedStickerSelection.isTabRow(prefix + "hhp"))
+        assertTrue(SavedStickerSelection.isPickerButton(prefix + "kw7"))
+        assertTrue(SavedStickerSelection.isSavedGrid(prefix + "srt"))
+        assertTrue(SavedStickerSelection.savedGridIds.contains(prefix + "srt"))
+        assertTrue(SavedStickerSelection.allowed(prefix + "srt", prefix + "hgv", 3, 2))
+        assertFalse(SavedStickerSelection.allowed(prefix + "srt", prefix + "hgv", 1, 2))
+        assertFalse(SavedStickerSelection.allowed(prefix + "srt", prefix + "kos", 3, 2))
+        assertFalse(SavedStickerSelection.allowed(prefix + "srt", prefix + "hgv", 3, -1))
+        assertFalse(SavedStickerSelection.allowed(prefix + "official_pack", prefix + "hgv", 3, 2))
+        assertFalse(SavedStickerSelection.allowed(prefix + "sqo", prefix + "hgv", 3, 2))
+        assertFalse(SavedStickerSelection.allowed(prefix + "srt", prefix + "hg3", 3, 2))
+    }
 }

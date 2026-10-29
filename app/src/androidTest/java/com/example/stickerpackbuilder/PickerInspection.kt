@@ -10,11 +10,36 @@ import com.example.stickerpackbuilder.sync.TikTokTransferService
 import org.json.JSONObject
 import java.io.File
 
-/** Read-only device check. It never taps a TikTok control or starts a transfer. */
+/** Default checks are read-only. reverse-speed opens verified previews but never presses Create or Send. */
 class PickerInspection : Instrumentation() {
     private var mode: String? = null
     override fun onCreate(arguments: Bundle?) { mode = arguments?.getString("mode"); super.onCreate(arguments); start() }
     override fun onStart() {
+        if(mode=="reverse-speed"){inspectReverseSpeed();return}
+        if(mode=="reverse-webp-audit") {
+            var mismatched=0;var repairable=0;var rejected=0;var validPrefix=0;var smaller=0
+            File(targetContext.filesDir,"reverse/originals").listFiles().orEmpty().filter{it.extension=="webp"&&it.length() in 12..8L*1024*1024}.forEach { file ->
+                val bytes=file.readBytes()
+                if(WebpContainer.isWebp(bytes)&&WebpContainer.uint(bytes,4,4)!=bytes.size-8){
+                    mismatched++
+                    val declared=WebpContainer.uint(bytes,4,4).toLong()+8
+                    if(declared in 12 until bytes.size.toLong()){
+                        smaller++
+                        if(runCatching{WebpContainer.parse(bytes.copyOf(declared.toInt()))}.isSuccess)validPrefix++
+                    }
+                    val copy=bytes.copyOf();WebpContainer.little(bytes.size-8,4).copyInto(copy,4)
+                    if(runCatching{WebpContainer.parse(copy)}.isSuccess)repairable++ else rejected++
+                }
+            }
+            finish(android.app.Activity.RESULT_OK,Bundle().apply{putString("result",JSONObject().put("sizeMismatches",mismatched).put("completeChunkRepairs",repairable).put("rejected",rejected).put("declaredSmaller",smaller).put("validDeclaredPayload",validPrefix).toString())});return
+        }
+        if (mode == "reverse-status") {
+            val result=Bundle()
+            val folder=File(targetContext.filesDir,"reverse")
+            result.putString("status",targetContext.getSharedPreferences("reverse",0).getString("helperStatus",""))
+            result.putString("batch",File(folder,"last-batch-performance.json").takeIf{it.isFile}?.readText())
+            finish(android.app.Activity.RESULT_OK,result);return
+        }
         if (mode == "navigation") { inspectNavigation(); return }
         if (mode == "startup") { inspectStartup(); return }
         var service: TikTokTransferService? = null
@@ -68,6 +93,55 @@ class PickerInspection : Instrumentation() {
             }
         }
         finish(resultCode, result)
+    }
+    /** Repeat the same verified source; stop before the journal/Create action. */
+    private fun inspectReverseSpeed(){
+        val result=Bundle();var service:TikTokTransferService?=null
+        var staged:com.example.stickerpackbuilder.reverse.StickerStager.Staged?=null
+        var code=android.app.Activity.RESULT_CANCELED
+        try{
+            val ui=getUiAutomation(UiAutomation.FLAG_DONT_SUPPRESS_ACCESSIBILITY_SERVICES)
+            repeat(1200){if(TikTokTransferService.instance==null)Thread.sleep(100)}
+            service=TikTokTransferService.instance?:error("Enable Sticker Sync accessibility")
+            val repo=com.example.stickerpackbuilder.reverse.ReverseRepository(targetContext)
+            val entry=repo.cached().firstOrNull{!it.lottie&&repo.verified(it.id)}?:error("No cached original")
+            val prepared=com.example.stickerpackbuilder.reverse.StickerStager.prepare(repo.original(entry.id),File(targetContext.filesDir,"reverse/prepared"))
+            val times=org.json.JSONArray()
+            val connected=service
+            com.example.stickerpackbuilder.reverse.ReverseState.active=true
+            runOnMainSync{connected.reverseImporter.startBatch(3){connected.reverseImporter.cancel()}}
+            repeat(3){index->
+                val file=com.example.stickerpackbuilder.reverse.StickerStager.stageVerified(targetContext,prepared,entry.id,retainPrevious=true)
+                staged=file
+                val latch=java.util.concurrent.CountDownLatch(1);var ok=false;var message=""
+                val start=android.os.SystemClock.uptimeMillis()
+                runOnMainSync{connected.reverseImporter.begin(file,inspectionOnly=true){success,copy->ok=success;message=copy;latch.countDown()}}
+                check(latch.await(130,java.util.concurrent.TimeUnit.SECONDS)){"Inspection timed out"}
+                check(ok&&message=="Verified preview ready. Nothing was created or sent."){message}
+                times.put(JSONObject().put("run",index+1).put("previewReadyMs",android.os.SystemClock.uptimeMillis()-start))
+                runOnMainSync{connected.reverseImporter.updateProgress(index+1,3)}
+                fun closeNode(n:AccessibilityNodeInfo):AccessibilityNodeInfo? {
+                    if(n.contentDescription?.toString()=="Close")return n
+                    for(child in 0 until n.childCount){n.getChild(child)?.let{closeNode(it)}?.let{return it}}
+                    return null
+                }
+                val root=ui.rootInActiveWindow?.takeIf{it.packageName?.toString()==TikTokTransferService.TIKTOK}
+                val close=root?.let(::closeNode)
+                var target=close
+                repeat(4){if(target?.isClickable!=true)target=target?.parent}
+                if(target?.performAction(AccessibilityNodeInfo.ACTION_CLICK)!=true)
+                    runOnMainSync{connected.performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)}
+                Thread.sleep(400)
+                com.example.stickerpackbuilder.reverse.StickerStager.discard(targetContext,file);staged=null
+            }
+            result.putString("result",JSONObject().put("inspectionOnly",true).put("created",0).put("sent",0).put("timings",times).toString());code=android.app.Activity.RESULT_OK
+        }catch(error:Throwable){result.putString("error",error.message?:error.toString())}
+        finally{
+            service?.let{connected->runOnMainSync{connected.reverseImporter.cancel();connected.reverseImporter.endBatch()}}
+            staged?.let{runCatching{com.example.stickerpackbuilder.reverse.StickerStager.discard(targetContext,it)}}
+            com.example.stickerpackbuilder.reverse.ReverseState.active=false
+        }
+        finish(code,result)
     }
     /** Uses the service's inspect-only path: navigation and metadata, zero sticker taps. */
     private fun inspectNavigation() {

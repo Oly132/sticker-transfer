@@ -26,7 +26,7 @@ abstract class Screen : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(0xff101923.toInt())
+            setBackgroundColor(0xff0d1420.toInt())
         }
         val root = FrameLayout(this)
         root.addView(column, FrameLayout.LayoutParams(-1, -1))
@@ -41,10 +41,11 @@ abstract class Screen : AppCompatActivity() {
         val toolbar = MaterialToolbar(this).apply {
             this.title = title
             setTitleTextColor(Color.WHITE)
+            setTitleTextAppearance(context, com.example.stickerpackbuilder.R.style.StickerSync_ToolbarTitle)
             if (back) {
                 setNavigationIcon(androidx.appcompat.R.drawable.abc_ic_ab_back_material)
                 navigationIcon?.setTint(Color.WHITE)
-                setNavigationOnClickListener { finish() }
+                setNavigationOnClickListener { onBackPressedDispatcher.onBackPressed() }
             }
         }
         column.addView(toolbar, LinearLayout.LayoutParams(-1, dp(64)))
@@ -55,13 +56,15 @@ abstract class Screen : AppCompatActivity() {
         text = value; textSize = size
         setTextColor(if (secondary) 0xffa8b5c5.toInt() else 0xfff3f6fa.toInt())
         setLineSpacing(dp(3).toFloat(), 1f)
+        includeFontPadding = false
     }
-    fun title(value: String) = text(value, 23f).apply { setTypeface(typeface, Typeface.BOLD) }
+    fun title(value: String) = text(value, 23f).apply { typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL); letterSpacing = -.015f }
     fun button(label: String, outlined: Boolean = false, action: () -> Unit) =
         MaterialButton(this, null, if (outlined) com.google.android.material.R.attr.materialButtonOutlinedStyle
             else com.google.android.material.R.attr.materialButtonStyle).apply {
-            text = label; isAllCaps = false; cornerRadius = dp(14); minHeight = dp(52)
-            letterSpacing = .02f
+            text = label; isAllCaps = false; cornerRadius = dp(18); minHeight = dp(52)
+            letterSpacing = .005f; textSize = 14f
+            typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
             Motion.press(this)
             val states = arrayOf(
                 intArrayOf(android.R.attr.state_enabled, android.R.attr.state_checked),
@@ -76,6 +79,7 @@ abstract class Screen : AppCompatActivity() {
                     if (outlined) Color.TRANSPARENT else 0xff293847.toInt()))
             if (outlined) strokeColor = android.content.res.ColorStateList(states,
                 intArrayOf(accent, 0xff425468.toInt(), 0xff293847.toInt()))
+            Polish.syncIcon(this)
             setOnClickListener { action() }
         }
     fun body(parent: LinearLayout = column): LinearLayout {
@@ -102,7 +106,11 @@ abstract class Screen : AppCompatActivity() {
               secondary: String = "Not now", extra: Pair<String, () -> Unit>? = null): androidx.appcompat.app.AlertDialog {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(22), dp(24), dp(12))
-            addView(text("STICKER SYNC", 11f, true).apply { letterSpacing = .16f; setTextColor(0xff64e3c0.toInt()) })
+            addView(LinearLayout(this@Screen).apply {
+                gravity=Gravity.CENTER_VERTICAL
+                addView(ImageView(this@Screen).apply { setImageResource(com.example.stickerpackbuilder.R.drawable.ic_launcher); importantForAccessibility=View.IMPORTANT_FOR_ACCESSIBILITY_NO },LinearLayout.LayoutParams(dp(30),dp(30)))
+                addView(text("STICKER SYNC",11f,true).apply{letterSpacing=.16f;setTextColor(Polish.MINT)},LinearLayout.LayoutParams(-2,-2).apply{marginStart=dp(8)})
+            })
             space(this, 10); addView(title(heading)); space(this, 12)
             addView(text("", 15f, true).apply { text = copy; setTextIsSelectable(true) })
         }

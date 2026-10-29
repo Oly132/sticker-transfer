@@ -1,5 +1,7 @@
 # Sticker Sync — polished Android prototype
 
+> Legacy manual tools documentation. For the current app's download and setup, use [Download](docs/DOWNLOAD.md) and [Install](docs/INSTALL.md). The main transfer screen now handles TikTok Saved → WhatsApp favourites; the pack-building workflow below is an older/manual alternative.
+
 A Kotlin Android app for collecting TikTok chat stickers and building WhatsApp packs. Android 8.0+; no PC companion, custom server, or broad photo-library permission.
 
 ## Use it

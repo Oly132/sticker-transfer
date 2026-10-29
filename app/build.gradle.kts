@@ -11,8 +11,8 @@ android {
         applicationId = "com.example.stickerpackbuilder"
         minSdk = 26
         targetSdk = 34
-        versionCode = 23
-        versionName = "4.7.3-samsung"
+        versionCode = 44
+        versionName = "4.9.14-samsung"
         testInstrumentationRunner = "com.example.stickerpackbuilder.PickerInspection"
     }
 

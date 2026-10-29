@@ -14,6 +14,8 @@ class AutoTransferSettingsActivity : Screen() {
         val body = body()
         body.addView(title("Keep your favourites together."))
         body.addView(text("Check your TikTok Saved stickers on a schedule. Only new stickers are downloaded and added to WhatsApp.", 15f, true))
+        space(body, 16)
+        body.addView(com.example.stickerpackbuilder.ui.Polish.route(this))
         space(body, 20)
         val p = AutoTransfer.prefs(this)
         card(body) { content ->

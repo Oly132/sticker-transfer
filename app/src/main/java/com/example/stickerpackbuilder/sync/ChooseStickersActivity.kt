@@ -25,10 +25,11 @@ class ChooseStickersActivity : Screen() {
             setResult(RESULT_OK, android.content.Intent().putExtra("refresh", true)); finish(); true
         }
         column.setPadding(dp(18), 0, dp(18), dp(12))
+        val intro=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL }
         heading = text("Choose your favourites", 22f)
-        column.addView(heading)
-        column.addView(text("Tap the ones you want. Synced stickers are already in WhatsApp.", 13f, true))
-        space(column, 12)
+        intro.addView(heading)
+        intro.addView(text("Tap the ones you want. Synced stickers are already in WhatsApp.", 13f, true))
+        space(intro, 12)
         val journal = JSONObject(File(filesDir, "transfer/journal.json").readText())
         val catalog = journal.getJSONArray("catalog")
         val urls = (0 until catalog.length()).map { catalog.getString(it) }.distinctBy(CollectedStickerLedger::assetKey)
@@ -36,19 +37,19 @@ class ChooseStickersActivity : Screen() {
         val gallery = TransferredGallery(this)
         val existing = gallery.entries().associateBy { it.getString("key") }
         grid = androidx.recyclerview.widget.RecyclerView(this).apply { layoutManager = androidx.recyclerview.widget.GridLayoutManager(this@ChooseStickersActivity, 3) }
-        column.addView(grid, LinearLayout.LayoutParams(-1, 0, 1f))
+        column.addView(com.example.stickerpackbuilder.ui.ScrollingGallery(this,intro,grid).view, LinearLayout.LayoutParams(-1, 0, 1f))
         action = button("Transfer selected stickers") {
             setResult(RESULT_OK, android.content.Intent().putStringArrayListExtra("selectedKeys", ArrayList(selected))); finish()
         }
         action.isEnabled = selected.isNotEmpty()
         column.addView(action, LinearLayout.LayoutParams(-1, dp(58)))
-        fun update() { heading.text = "${selected.size} selected · ${urls.size} Saved"; action.text = "Transfer ${selected.size} " + if (selected.size == 1) "sticker" else "stickers"; action.isEnabled = selected.isNotEmpty() }
+        fun update() { heading.text = "${selected.size} selected · ${urls.size} Saved"; action.text = "Transfer ${selected.size} " + if (selected.size == 1) "sticker" else "stickers"; action.isEnabled = selected.isNotEmpty();com.example.stickerpackbuilder.ui.Polish.syncIcon(action) }
         grid.adapter = object : androidx.recyclerview.widget.RecyclerView.Adapter<Tile>() {
             override fun getItemCount() = urls.size
             override fun onCreateViewHolder(parent: android.view.ViewGroup, type: Int): Tile {
                 val card = com.google.android.material.card.MaterialCardView(this@ChooseStickersActivity).apply {
                     radius = dp(16).toFloat(); cardElevation = 0f; strokeWidth = dp(1)
-                    setCardBackgroundColor(0xff1b2b3d.toInt())
+                    setCardBackgroundColor(com.example.stickerpackbuilder.ui.Polish.SURFACE)
                     layoutParams = androidx.recyclerview.widget.RecyclerView.LayoutParams(-1, dp(140)).apply { setMargins(dp(4), dp(4), dp(4), dp(4)) }
                     com.example.stickerpackbuilder.ui.Motion.press(this)
                 }
@@ -57,7 +58,7 @@ class ChooseStickersActivity : Screen() {
                 }
                 val image = ImageView(this@ChooseStickersActivity).apply { scaleType = ImageView.ScaleType.FIT_CENTER }
                 box.addView(image, LinearLayout.LayoutParams(-1, 0, 1f))
-                val check = CheckBox(this@ChooseStickersActivity).apply { textSize = 11f; setTextColor(-1); minHeight = dp(32) }
+                val check = com.google.android.material.checkbox.MaterialCheckBox(this@ChooseStickersActivity).apply { textSize = 11f; setTextColor(-1); minHeight = dp(36);com.example.stickerpackbuilder.ui.Polish.selection(this) }
                 box.addView(check)
                 card.addView(box, FrameLayout.LayoutParams(-1, -1))
                 return Tile(card, image, check)
@@ -76,7 +77,7 @@ class ChooseStickersActivity : Screen() {
                 holder.check.isEnabled = !synced && file?.exists() == true
                 com.bumptech.glide.Glide.with(holder.image).clear(holder.image)
                 if (file?.exists() == true) com.bumptech.glide.Glide.with(holder.image).asBitmap().load(file).override(dp(100), dp(100)).into(holder.image)
-                else holder.image.setImageResource(android.R.drawable.ic_menu_gallery)
+                else holder.image.setImageResource(com.example.stickerpackbuilder.R.drawable.ic_ui_sticker)
                 holder.check.setOnCheckedChangeListener { _, checked ->
                     if (checked) selected.add(key) else selected.remove(key)
                     card.isSelected = checked

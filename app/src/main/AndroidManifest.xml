@@ -37,6 +37,7 @@
 
         <service android:name=".sync.PhoneConnectorService" android:process=":connector" android:exported="false" android:foregroundServiceType="dataSync" />
         <service android:name=".sync.TikTokTransferService" android:exported="true" android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"><intent-filter><action android:name="android.accessibilityservice.AccessibilityService" /></intent-filter><meta-data android:name="android.accessibilityservice" android:resource="@xml/tiktok_accessibility" /></service>
+        <activity android:name=".reverse.ReverseTransferActivity" android:exported="false" />
         <activity android:name=".sync.ChooseStickersActivity" android:exported="false" />
         <activity android:name=".sync.AutoTransferSettingsActivity" android:exported="false" />
         <activity android:name=".sync.RemoveStickersActivity" android:exported="false" />

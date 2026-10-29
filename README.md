@@ -1,69 +1,63 @@
 # Sticker Transfer
 
-An Android app for bringing TikTok Saved stickers into WhatsApp favourites, on the phone. The app is currently labelled **Sticker Sync** on Android.
+<img src="docs/images/app-icon.png" width="96" alt="Sticker Transfer app icon">
 
-**[Download the latest APK](https://github.com/Oly132/sticker-transfer/releases/latest/download/StickerTransfer.apk)** · **[All releases](https://github.com/Oly132/sticker-transfer/releases)**
+**Your TikTok stickers, in WhatsApp. Free, with no ads.**
 
-Android 8.0+ and ARM64. No companion PC or paid server is needed for transfers. Free, no ads. Project-authored source is MIT licensed; bundled dependencies retain their own licences.
+Sticker Transfer is an open-source Android app for moving saved TikTok stickers into WhatsApp favourites. Static and animated stickers are supported. On your phone, the app is called **Sticker Sync**.
 
-## Use it
+## Download the app
 
-1. Install the release APK over your existing Sticker Sync installation.
-2. Tap **Transfer all** or **Choose stickers**. Setup opens only when needed: TikTok sign-in, WhatsApp linking and Android accessibility permission.
-3. Choose a batch size and keep the phone unlocked while it runs. Static and animated stickers are supported. Previously collected originals are skipped.
-4. Use **Manage** to select transferred stickers to remove from WhatsApp favourites. **Select all** selects the collection; removal still requires confirmation.
-5. **Settings** includes scheduled transfer and **Check for updates**.
+### [⬇ Download StickerTransfer.apk](https://github.com/Oly132/sticker-transfer/releases/latest/download/StickerTransfer.apk)
 
-TikTok/WhatsApp integration uses platform UI and a local linked-device connector. Compatibility can change when those apps change.
+**Open this link on your Android phone. You do not need a computer, a GitHub account, or the source code.**
 
-## Updates from GitHub
+[Easy installation and setup →](docs/INSTALL.md) · [Download page →](docs/DOWNLOAD.md) · [What's new →](https://github.com/Oly132/sticker-transfer/releases/latest)
 
-Version 4.7 introduces the updater. Users of older APKs must install **4.7 or newer once** to receive future in-app prompts.
+Android **8.0 or newer**, with a **64-bit ARM processor**. Tested on a Samsung Galaxy S21 FE. Other phones and app versions may behave differently. iPhone and iPad are not supported.
 
-When the app is opened, it checks this repository's latest stable GitHub Release in the background. Checks are cached for 15 minutes. A newer numbered release with an APK prompts **New update available — update now? Yes / No** while the app is idle. No download starts after No; the same release remains available in Settings. A newer release will prompt again. Drafts, prereleases and older versions are ignored.
+## Get started
 
-Yes downloads the APK, checks size, GitHub's SHA-256 digest when supplied, the package identity, an increased Android version code, and the installed signing certificate. Then Android's installer asks the user to approve installation. Android may first ask the user to allow installs from Sticker Sync. The app cannot silently install itself, bypass this approval, or guarantee an automatic restart. Updating over the existing app keeps its stored logins and collection.
+1. Download **StickerTransfer.apk**, open it, and tap **Install**. If Android asks, allow installation from the browser or file app you used.
+2. Open **Sticker Sync** and tap **Transfer all** or **Choose stickers**.
+3. Follow the setup prompts: enable Sticker Sync in Accessibility, connect WhatsApp, and sign in to TikTok using the **same account as your normal TikTok app**.
+4. Choose how many stickers to check. For your first try, choose **10**.
+5. Keep the phone unlocked and leave it alone until the transfer finishes. Open WhatsApp's sticker picker and tap its **star/favourites** tab to find them.
 
-No GitHub login or API token is included in the app. Failed update checks do not block transfers unless a required update was already discovered and cached. Checks and downloads do not interrupt an active transfer.
+**Stuck? [Follow the step-by-step setup guide](docs/INSTALL.md).** It explains exactly where to paste the WhatsApp code and how to fix **Controlled by restricted settings**.
 
-Starting with **4.7.3**, a release containing the exact marker `<!-- mandatory-update -->` in its notes requires installation before starting another transfer. It shows **Update required** with **Update now** or **Close app**, cannot be dismissed with Back or an outside tap, and ignores an earlier optional dismissal of that release. Closing the update page closes the app; download/installation failures offer retry. The requirement remains cached while offline until a successful check removes or replaces it. Android still requires installation confirmation. Versions **4.7–4.7.2** predate this policy and can only offer their existing optional Yes/No prompt, even for a marked release.
+## What it does
 
-## Publish an update
+- Transfer all or choose specific TikTok Saved stickers, static or animated.
+- Choose a limit: 10, 20, 50, 70, 100, 200, or all. Limits start with the newest Saved stickers.
+- Keep transferred stickers in an in-app gallery and skip originals already collected by this installation.
+- Select unwanted transfers in **Manage** and remove them from WhatsApp favourites.
+- Browse with a header that moves away as you scroll, giving stickers more space.
+- Check for new releases in the app; Android asks you to approve installation.
+- Optionally schedule TikTok → WhatsApp transfers from **Settings**. Android may delay them; the phone must be unlocked, and unattended transfer is not guaranteed.
 
-The maintainer can upload a new signed APK to a normal GitHub Release. **No separate update manifest or hosting service is required.**
+### WhatsApp → TikTok: early alpha
 
-1. Increase both `versionCode` and `versionName` in `app/build.gradle.kts`.
-2. Build and test the `prototype` variant using the **original signing key**. Its application ID is `com.example.stickerpackbuilder.samsunglab` for compatibility with existing Samsung test installations.
-3. Commit/push the source changes.
-4. Publish a stable release tagged with a newer version such as `v4.8.0`, attach its APK, and mark it Latest. Prefer the asset name **StickerTransfer.apk**. If using another name, attach exactly one APK.
+The direction switch also offers WhatsApp → TikTok. **This is very early alpha: transfers are very slow and have a high error rate.** It needs Android 10 or newer. Start with one sticker. You may need to connect your WhatsApp sticker folder once. This experimental direction is not as reliable as the main TikTok → WhatsApp flow.
 
-The Windows helper validates the package, tag and signing certificate, then publishes the APK and checksum:
+## Permissions and your accounts
 
-```powershell
-$env:JAVA_HOME = 'C:/Program Files/Android/Android Studio/jbr'
-./scripts/publish-release.ps1 -Tag v4.8.0 -Apk ./app/build/outputs/apk/prototype/app-prototype.apk -NotesFile ./my-release-notes.md
-# Require this release for clients running 4.7.3 or newer:
-./scripts/publish-release.ps1 -Tag v4.8.0 -Apk ./app/build/outputs/apk/prototype/app-prototype.apk -NotesFile ./my-release-notes.md -Mandatory
-```
+The app asks for setup only when needed. **Accessibility** lets it navigate TikTok; enable it only if you trust this app. **Notifications** support transfer status and optional scheduling. For reverse transfers, Android's **folder picker** can grant access to the WhatsApp Stickers folder. **Install unknown apps** is needed for APK installation or updates, not for transferring stickers.
 
-Omit `-Apk` to build/test first using the Gradle wrapper. The helper requires GitHub CLI (`gh`) signed into the maintainer account and Android SDK build tools. It never uploads a signing key. Its release notes record the Android version code to reject accidental non-incrementing future releases.
+Transfers run on your phone through TikTok's interface, an embedded TikTok web session, and a local WhatsApp linked-device connector. No companion computer or project-hosted transfer server is needed. Your phone still contacts TikTok and WhatsApp over the internet. During TikTok → WhatsApp transfer, the app uses your **own TikTok self-chat** to retrieve originals and attempts to tidy up its temporary messages. If interrupted, some may remain; existing messages are preserved.
 
-**Signing continuity:** the currently installed certificate must remain the same. Official APKs preserve the original development certificate for compatibility. The private keystore is not in this repository. A fresh developer checkout's generated debug key is different and cannot update official copies. Keep the maintainer's original keystore backed up privately; publishing a newly generated key is not a substitute.
+This is an independent project, not an official TikTok or WhatsApp app. Its integrations can stop working when those services change. The WhatsApp connection uses an unofficial linked-device library and is not supported by WhatsApp. See [privacy and account details](docs/PRIVACY.md).
 
-## Build and test
+## Updating
 
-JDK 17/21, Android SDK 34, Android Gradle Plugin 8.5, Kotlin 1.9.24, Gradle 8.7. Configure the local SDK in untracked `local.properties`.
+Install the newer APK **over the existing app**. Do not uninstall first: that clears the app's logins, history and duplicate tracking. You can also use **Settings → Check for updates**. Android may ask you to allow installations from Sticker Sync and confirm **Update**.
 
-```powershell
-./gradlew.bat testDebugUnitTest lintDebug assemblePrototype
-# Optional JavaScript readiness/transfer-helper regression checks (Node.js):
-node --test scripts/tests/tiktok-session.test.mjs scripts/tests/tiktok-chat-route.test.mjs scripts/tests/transfer-web.test.mjs
-```
+The in-app updater checks this repository's stable GitHub Releases. It cannot silently install an APK or bypass Android's confirmation. Maintainers can mark a release as required; see the [developer guide](docs/DEVELOPMENT.md#publishing).
 
-- `prototype`: signed, non-debuggable APK; retains the existing Samsung app ID. Official release publishing requires the original local signing key.
-- `debug`: development build with WebView inspection.
-- `release`: unsigned build with the base app ID, not compatible as an update to Samsung test copies.
+## Open source
 
-Project UI/source, conversion and transfer tests are included. Android instrumentation contains an optional read-only Saved picker/startup inspection; it does not send stickers. See [development history](docs/DEVELOPMENT-HISTORY.md) for earlier measurements and implementation details, and [third-party notices](THIRD_PARTY_NOTICES.md) for bundled runtimes.
+Project-authored code is available under the **[MIT License](LICENSE)**. You can inspect, modify and share it under that license. Bundled dependencies retain their own [licenses and notices](THIRD_PARTY_NOTICES.md); TikTok and WhatsApp branding belongs to their owners.
 
-No passwords, authenticated cookies, WhatsApp session files, phone app data or private signing files are included in the repository.
+Developers: [build, test and publish](docs/DEVELOPMENT.md) · [reverse-transfer engineering notes](REVERSE-TRANSFER.md) · [earlier development history](docs/DEVELOPMENT-HISTORY.md).
+
+Found a problem? [Open an issue](https://github.com/Oly132/sticker-transfer/issues). Include your phone model, Android/TikTok/WhatsApp versions, the Sticker Sync version, and the error text. **Do not post passwords, linking codes, session files or private chats.**

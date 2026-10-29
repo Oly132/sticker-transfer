@@ -16,6 +16,8 @@ import java.io.File
 
 class TikTokTransferService : AccessibilityService() {
     companion object { var instance: TikTokTransferService? = null; const val TIKTOK = "com.zhiliaoapp.musically" }
+    private val reverseDelegate = lazy { com.example.stickerpackbuilder.reverse.ReverseImporter(this) }
+    val reverseImporter get() = reverseDelegate.value
     private val handler = Handler(Looper.getMainLooper())
     private val automationThread = android.os.HandlerThread("sticker-automation").apply { start() }
     private val automation = Handler(automationThread.looper)
@@ -75,6 +77,7 @@ class TikTokTransferService : AccessibilityService() {
         handler.postDelayed({ AutoTransfer.attempt(this) }, 1000)
     }
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
+        if(reverseDelegate.isInitialized())reverseImporter.onAccessibilityEvent(event)
         if (event?.packageName?.toString() != TIKTOK || step !in navigationSteps || !navigationWakeQueued.compareAndSet(false, true)) return
         val ticket = generation.get()
         automation.postDelayed({
@@ -88,6 +91,7 @@ class TikTokTransferService : AccessibilityService() {
     override fun onInterrupt() { android.util.Log.i("StickerTransfer", "Accessibility feedback interrupted; step=$step") }
     override fun onDestroy() {
         android.util.Log.i("StickerTransfer", "Accessibility service destroyed; step=$step")
+        if(reverseDelegate.isInitialized())reverseImporter.destroy()
         instance = null; if (step != "idle") cancel()
         unlockReceiver?.let { runCatching { unregisterReceiver(it) } }; unlockReceiver = null
         generation.incrementAndGet(); automation.removeCallbacksAndMessages(null); automationThread.quitSafely()
@@ -97,6 +101,7 @@ class TikTokTransferService : AccessibilityService() {
     fun begin(id: String, handle: String, name: String, diagnostic: Boolean = false, limit: Int = 10) {
         require(id.matches(Regex("[0-9]{5,30}"))) { "Invalid self-account identifier" }
         require(handle.matches(Regex("[A-Za-z0-9_.]{2,30}"))) { "Invalid TikTok username" }
+        require(!com.example.stickerpackbuilder.reverse.ReverseState.active) { "A reverse transfer is already running" }
         require(step == "idle") { "A transfer is already running" }
         require(limit in listOf(10, 20, 50, 70, 100, 200, Int.MAX_VALUE)) { "Invalid transfer limit" }
         val ticket = generation.incrementAndGet()
@@ -298,7 +303,7 @@ class TikTokTransferService : AccessibilityService() {
         }
         if (step == "copy") {
             if (TransferState.copied >= maximum) { finishCopy(); return }
-            val grid = listOf("ssb", "sqo").flatMap { root.findAccessibilityNodeInfosByViewId("$TIKTOK:id/$it") }.singleOrNull()
+            val grid = SavedStickerSelection.savedGridIds.flatMap { root.findAccessibilityNodeInfosByViewId(it) }.singleOrNull()
                 ?: run { fail("TikTok left the Saved grid. Transfer stopped before any other pack was copied."); return }
             val candidates = if (pageCandidates.isEmpty() || inspectOnly) nodes(grid).filter {
                 val r = bounds(it)

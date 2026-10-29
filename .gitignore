@@ -14,3 +14,7 @@ release-output/
 **/creds.json
 **/shared_prefs/
 **/transfer-diagnostics/
+
+connector/node_modules/
+connector/auth/
+connector/reverse-originals/

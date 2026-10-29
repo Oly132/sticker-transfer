@@ -21,7 +21,7 @@ object PhoneRuntime {
         try {
             val root = File(context.filesDir, "phone-runtime").apply { mkdirs() }
             val revision = File(root, "revision")
-            if (!revision.exists() || revision.readText() != "11") {
+            if (!revision.exists() || revision.readText() != "15") {
                 ZipInputStream(context.assets.open("phone-runtime.zip")).use { zip ->
                     var entry = zip.nextEntry
                     while (entry != null) {
@@ -33,7 +33,7 @@ object PhoneRuntime {
                         entry = zip.nextEntry
                     }
                 }
-                revision.writeText("11")
+                revision.writeText("15")
             }
             val config = File(root, "rpc-config.json")
             if (!config.exists()) config.writeText(JSONObject().put("token", UUID.randomUUID().toString() + UUID.randomUUID()).toString())

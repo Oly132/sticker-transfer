@@ -1,4 +1,5 @@
 <resources>
     <item name="filter_still" type="id" />
     <item name="filter_animated" type="id" />
+    <item name="ui_icon_kind" type="id" />
 </resources>

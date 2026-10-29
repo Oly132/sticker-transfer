@@ -41,7 +41,7 @@ object AutoTransfer {
     }
     fun unlocked(context: Context) = (context.getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive &&
         !(context.getSystemService(Context.KEYGUARD_SERVICE) as KeyguardManager).isKeyguardLocked
-    fun active() = TransferState.status.value?.phase in setOf(TransferState.Phase.VERIFYING, TransferState.Phase.COPYING,
+    fun active() = com.example.stickerpackbuilder.reverse.ReverseState.active || TransferState.status.value?.phase in setOf(TransferState.Phase.VERIFYING, TransferState.Phase.COPYING,
         TransferState.Phase.COLLECTING, TransferState.Phase.DELIVERING, TransferState.Phase.CLEANING)
     /** Must run on the main thread, using the enabled accessibility service's launch context. */
     @Synchronized fun attempt(context: Context, service: TikTokTransferService? = TikTokTransferService.instance) {

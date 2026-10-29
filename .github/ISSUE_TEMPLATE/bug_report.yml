@@ -1,0 +1,36 @@
+name: Something isn't working
+description: Report a Sticker Sync problem. Never include passwords or linking codes.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Need the app? [Download and setup](https://github.com/Oly132/sticker-transfer/blob/main/docs/INSTALL.md).
+        Please do not share passwords, WhatsApp linking codes, session files or private chats. Crop private information out of screenshots.
+  - type: input
+    id: version
+    attributes:
+      label: Sticker Sync version
+      placeholder: For example, 4.9.14
+  - type: input
+    id: phone
+    attributes:
+      label: Phone and Android version
+      placeholder: For example, Samsung Galaxy S21 FE, Android 14
+  - type: dropdown
+    id: direction
+    attributes:
+      label: Where did it happen?
+      options:
+        - TikTok to WhatsApp
+        - WhatsApp to TikTok (early alpha)
+        - Installation or permissions
+        - WhatsApp linking or TikTok login
+        - Something else
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include the exact error and the steps that led to it. If known, add your TikTok and WhatsApp versions.
+    validations:
+      required: true
